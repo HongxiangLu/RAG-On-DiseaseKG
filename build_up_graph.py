@@ -1,5 +1,4 @@
 import os
-import re
 import py2neo
 from tqdm import tqdm
 import argparse
@@ -41,9 +40,9 @@ def create_all_relationship(client,all_relationship):
 if __name__ == "__main__":
     #连接数据库的一些参数
     parser = argparse.ArgumentParser(description="通过medical.json文件,创建一个知识图谱")
-    parser.add_argument('--website', type=str, default='http://localhost:7474', help='neo4j的连接网站')
+    parser.add_argument('--website', type=str, default='neo4j+s://1780803b.databases.neo4j.io', help='neo4j的连接网站')
     parser.add_argument('--user', type=str, default='neo4j', help='neo4j的用户名')
-    parser.add_argument('--password', type=str, default='wei8kang7.long', help='neo4j的密码')
+    parser.add_argument('--password', type=str, default='Td-9pMq5QvAEhehWZh5cANjIvNf9P6Crpc7WnhDV2Hc', help='neo4j的密码')
     parser.add_argument('--dbname', type=str, default='neo4j', help='数据库名称')
     args = parser.parse_args()
 
