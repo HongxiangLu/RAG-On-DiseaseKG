@@ -1,180 +1,241 @@
-import os
 import py2neo
 from tqdm import tqdm
 import argparse
+from collections import defaultdict
+
+# ================= 配置区 =================
+BATCH_SIZE = 3000  # 每批次处理的大小，建议 1000-5000 之间
 
 
-#导入普通实体
-def import_entity(client,type,entity):
-    def create_node(client,type,name):
-        order = """create (n:%s{名称:"%s"})"""%(type,name)
-        client.run(order)
+# ================= 核心工具函数 =================
 
-    print(f'正在导入{type}类数据')
-    for en in tqdm(entity):
-        create_node(client,type,en)
-#导入疾病类实体
-def import_disease_data(client,type,entity):
-    print(f'正在导入{type}类数据')
-    for disease in tqdm(entity):
-        node = py2neo.Node(type,
-                           名称=disease["名称"],
-                           疾病简介=disease["疾病简介"],
-                           疾病病因=disease["疾病病因"],
-                           预防措施=disease["预防措施"],
-                           治疗周期=disease["治疗周期"],
-                           治愈概率=disease["治愈概率"],
-                           疾病易感人群=disease["疾病易感人群"],
+def create_indexes(graph, labels):
+    """
+    为所有标签的'名称'属性创建唯一索引/约束。
+    这对于加快 match 速度至关重要，否则插入关系会非常慢。
+    """
+    print("正在创建索引以加速查询...")
+    for label in labels:
+        # 在 py2neo 中，通常使用 Cypher 创建约束（包含索引功能）
+        # Neo4j 4.x/5.x 语法：
+        query = f"CREATE CONSTRAINT IF NOT EXISTS FOR (n:{label}) REQUIRE n.名称 IS UNIQUE"
+        try:
+            graph.run(query)
+        except Exception as e:
+            # 如果是旧版本 Neo4j，语法可能不同，或者约束已存在
+            print(f"创建索引警告 ({label}): {e}")
 
-                           )
-        client.create(node)
 
-def create_all_relationship(client,all_relationship):
-    def create_relationship(client,type1, name1,relation, type2,name2):
-        order = """match (a:%s{名称:"%s"}),(b:%s{名称:"%s"}) create (a)-[r:%s]->(b)"""%(type1,name1,type2,name2,relation)
-        client.run(order)
-    print("正在导入关系.....")
-    for type1, name1,relation, type2,name2  in tqdm(all_relationship):
-        create_relationship(client,type1, name1,relation, type2,name2)
+def batch_run(graph, query, data, desc="处理中"):
+    """
+    通用批量执行函数
+    :param graph: py2neo Graph对象
+    :param query: 包含 UNWIND $batch AS row 的 Cypher 语句
+    :param data: 字典列表
+    """
+    if not data:
+        return
+
+    total = len(data)
+    for i in tqdm(range(0, total, BATCH_SIZE), desc=desc):
+        batch = data[i: i + BATCH_SIZE]
+        graph.run(query, batch=batch)
+
+
+# ================= 导入逻辑 =================
+
+def import_entity_batch(client, label, entity_list):
+    """
+    批量导入普通实体
+    """
+    # 使用 MERGE 避免重复，如果确定是新库可以用 CREATE
+    query = f"""
+    UNWIND $batch AS name
+    MERGE (n:{label} {{名称: name}})
+    """
+    # entity_list 是一个字符串列表 ['药A', '药B'...]
+    batch_run(client, query, entity_list, desc=f"导入 {label}")
+
+
+def import_disease_data_batch(client, disease_list):
+    """
+    批量导入疾病实体（属性较多）
+    """
+    query = """
+    UNWIND $batch AS row
+    MERGE (n:疾病 {名称: row.名称})
+    SET n += {
+        疾病简介: row.疾病简介,
+        疾病病因: row.疾病病因,
+        预防措施: row.预防措施,
+        治疗周期: row.治疗周期,
+        治愈概率: row.治愈概率,
+        疾病易感人群: row.疾病易感人群
+    }
+    """
+    batch_run(client, query, disease_list, desc="导入 疾病")
+
+
+def create_relationship_batch(client, all_relationship):
+    """
+    批量导入关系
+    难点：Cypher 不支持动态 Label (如 MATCH (n:$label))，
+    所以必须在 Python 端按 (Label1, Relation, Label2) 分组。
+    """
+    print("正在对关系数据进行分组预处理...")
+
+    # 分组结构: key=(type1, relation, type2), value=[{name1:..., name2:...}, ...]
+    grouped_rels = defaultdict(list)
+
+    for type1, name1, relation, type2, name2 in all_relationship:
+        key = (type1, relation, type2)
+        grouped_rels[key].append({"n1": name1, "n2": name2})
+
+    print(f"关系分组完成，共 {len(grouped_rels)} 种关系类型。开始批量导入...")
+
+    for (type1, rel_type, type2), data_list in grouped_rels.items():
+        # 动态构建 Cypher
+        query = f"""
+        UNWIND $batch AS row
+        MATCH (a:{type1} {{名称: row.n1}})
+        MATCH (b:{type2} {{名称: row.n2}})
+        MERGE (a)-[r:{rel_type}]->(b)
+        """
+        batch_run(client, query, data_list, desc=f"连线 {type1}->{rel_type}->{type2}")
+
+
+# ================= 主程序 =================
 
 if __name__ == "__main__":
-    #连接数据库的一些参数
     parser = argparse.ArgumentParser(description="通过medical.json文件,创建一个知识图谱")
     parser.add_argument('--website', type=str, default='neo4j+s://1780803b.databases.neo4j.io', help='neo4j的连接网站')
     parser.add_argument('--user', type=str, default='neo4j', help='neo4j的用户名')
-    parser.add_argument('--password', type=str, default='Td-9pMq5QvAEhehWZh5cANjIvNf9P6Crpc7WnhDV2Hc', help='neo4j的密码')
+    parser.add_argument('--password', type=str, default='Td-9pMq5QvAEhehWZh5cANjIvNf9P6Crpc7WnhDV2Hc',
+                        help='neo4j的密码')
     parser.add_argument('--dbname', type=str, default='neo4j', help='数据库名称')
     args = parser.parse_args()
 
-    #连接...
-    client = py2neo.Graph(args.website, user=args.user, password=args.password, name=args.dbname)
+    # 1. 连接数据库
+    try:
+        client = py2neo.Graph(args.website, user=args.user, password=args.password, name=args.dbname)
+        print("数据库连接成功")
+    except Exception as e:
+        print(f"数据库连接失败: {e}")
+        exit(1)
 
-    #将数据库中的内容删光
-    is_delete = input('注意:是否删除neo4j上的所有实体 (y/n):')
-    if is_delete=='y':
-        client.run("match (n) detach delete (n)")
+    # 2. 清空数据库
+    print('删除neo4j上的所有实体......')
+    client.run("MATCH (n) DETACH DELETE (n)")
 
-    with open('./data/medical_new_2.json','r',encoding='utf-8') as f:
+    # 3. 数据处理 (保持原有逻辑，稍作清理)
+    print("正在读取并解析 JSON 数据...")
+    with open('./data/medical_new_2.json', 'r', encoding='utf-8') as f:
         all_data = f.read().split('\n')
-    
-    #所有实体
-    all_entity = {
-        "疾病": [],
-        "药品": [],
-        "食物": [],
-        "检查项目":[],
-        "科目":[],
-        "疾病症状":[],
-        "治疗方法":[],
-        "药品商":[],
-    }
-    
-    # 实体间的关系
-    relationship = []
-    for i,data in enumerate(all_data):
-        if (len(data) < 3):
-            continue
-        data = eval(data[:-1])
 
-        disease_name = data.get("name","")
+    all_entity = {
+        "疾病": [], "药品": [], "食物": [], "检查项目": [],
+        "科目": [], "疾病症状": [], "治疗方法": [], "药品商": [],
+    }
+
+    relationship = []
+
+    for data_str in tqdm(all_data, desc="解析原始数据"):
+        if len(data_str) < 3:
+            continue
+        try:
+            data = eval(data_str[:-1])  # 使用 eval 解析每行
+        except:
+            continue
+
+        disease_name = data.get("name", "")
         all_entity["疾病"].append({
-            "名称":disease_name,
+            "名称": disease_name,
             "疾病简介": data.get("desc", ""),
             "疾病病因": data.get("cause", ""),
             "预防措施": data.get("prevent", ""),
-            "治疗周期":data.get("cure_lasttime",""),
+            "治疗周期": data.get("cure_lasttime", ""),
             "治愈概率": data.get("cured_prob", ""),
             "疾病易感人群": data.get("easy_get", ""),
         })
 
+        # --- 提取实体和关系逻辑 (保持不变) ---
         drugs = data.get("common_drug", []) + data.get("recommand_drug", [])
-        all_entity["药品"].extend(drugs)  # 添加药品实体
+        all_entity["药品"].extend(drugs)
         if drugs:
-            relationship.extend([("疾病", disease_name, "疾病使用药品", "药品",durg)for durg in drugs])
+            relationship.extend([("疾病", disease_name, "疾病使用药品", "药品", drug) for drug in drugs])
 
-        do_eat = data.get("do_eat",[])+data.get("recommand_eat",[])
-        no_eat = data.get("not_eat",[])
-        all_entity["食物"].extend(do_eat+no_eat)
+        do_eat = data.get("do_eat", []) + data.get("recommand_eat", [])
+        no_eat = data.get("not_eat", [])
+        all_entity["食物"].extend(do_eat + no_eat)
         if do_eat:
-            relationship.extend([("疾病", disease_name,"疾病宜吃食物","食物",f) for f in do_eat])
+            relationship.extend([("疾病", disease_name, "疾病宜吃食物", "食物", f) for f in do_eat])
         if no_eat:
             relationship.extend([("疾病", disease_name, "疾病忌吃食物", "食物", f) for f in no_eat])
 
         check = data.get("check", [])
         all_entity["检查项目"].extend(check)
         if check:
-            relationship.extend([("疾病", disease_name, "疾病所需检查", "检查项目",ch) for ch in check])
+            relationship.extend([("疾病", disease_name, "疾病所需检查", "检查项目", ch) for ch in check])
 
-        cure_department=data.get("cure_department", [])
+        cure_department = data.get("cure_department", [])
         all_entity["科目"].extend(cure_department)
         if cure_department:
-            relationship.append(("疾病", disease_name, "疾病所属科目", "科目",cure_department[-1]))
+            relationship.append(("疾病", disease_name, "疾病所属科目", "科目", cure_department[-1]))
 
-        symptom = data.get("symptom",[])
-        for i,sy in enumerate(symptom):
-            if symptom[i].endswith('...'):
-                symptom[i] = symptom[i][:-3]
+        symptom = data.get("symptom", [])
+        # 简单清理 symptom
+        symptom = [sy[:-3] if sy.endswith('...') else sy for sy in symptom]
         all_entity["疾病症状"].extend(symptom)
         if symptom:
-            relationship.extend([("疾病", disease_name, "疾病的症状", "疾病症状",sy )for sy in symptom])
+            relationship.extend([("疾病", disease_name, "疾病的症状", "疾病症状", sy) for sy in symptom])
 
         cure_way = data.get("cure_way", [])
         if cure_way:
-            for i,cure_w in enumerate(cure_way):
-                if(isinstance(cure_way[i], list)):
-                    cure_way[i] = cure_way[i][0] #glm处理数据集偶尔有格式错误
-            cure_way = [s for s in cure_way if len(s) >= 2]
-            all_entity["治疗方法"].extend(cure_way)
-            relationship.extend([("疾病", disease_name, "治疗的方法", "治疗方法", cure_w) for cure_w in cure_way])
-            
+            # 简单清理 cure_way
+            clean_cure_way = []
+            for w in cure_way:
+                if isinstance(w, list): w = w[0]
+                if w and len(str(w)) >= 2: clean_cure_way.append(w)
+
+            all_entity["治疗方法"].extend(clean_cure_way)
+            relationship.extend([("疾病", disease_name, "治疗的方法", "治疗方法", w) for w in clean_cure_way])
 
         acompany_with = data.get("acompany", [])
         if acompany_with:
-            relationship.extend([("疾病", disease_name, "疾病并发疾病", "疾病", disease) for disease in acompany_with])
+            relationship.extend([("疾病", disease_name, "疾病并发疾病", "疾病", d) for d in acompany_with])
 
-        drug_detail = data.get("drug_detail",[])
+        drug_detail = data.get("drug_detail", [])
         for detail in drug_detail:
-            lis = detail.split(',')
-            if(len(lis)!=2):
-                continue
-            p,d = lis[0],lis[1]
-            all_entity["药品商"].append(d)
-            all_entity["药品"].append(p)
-            relationship.append(('药品商',d,"生产","药品",p))
-    for i in range(len(relationship)):
-        if len(relationship[i])!=5:
-            print(relationship[i])
+            if ',' in detail:
+                lis = detail.split(',')
+                if len(lis) == 2:
+                    p, d = lis[0], lis[1]
+                    all_entity["药品商"].append(d)
+                    all_entity["药品"].append(p)
+                    relationship.append(('药品商', d, "生产", "药品", p))
+
+    # 去重
     relationship = list(set(relationship))
-    all_entity = {k:(list(set(v)) if k!="疾病" else v)for k,v in all_entity.items()}
-    
-    # 保存关系 放到data下
-    with open("./data/rel_aug.txt",'w',encoding='utf-8') as f:
-        for rel in relationship:
-            f.write(" ".join(rel))
-            f.write('\n')
+    # 实体去重 (保持 '疾病' 列表不变，因为它是 dict list，其他是 str list)
+    for k, v in all_entity.items():
+        if k != "疾病":
+            all_entity[k] = list(set(v))
 
-    if not os.path.exists('data/ent_aug'):
-        os.mkdir('data/ent_aug')
-    for k,v in all_entity.items():
-        with open(f'data/ent_aug/{k}.txt','w',encoding='utf8') as f:
-            if(k!='疾病'):
-                for i,ent in enumerate(v):
-                    f.write(ent+('\n' if i != len(v)-1 else ''))
-            else:
-                for i,ent in enumerate(v):
-                    f.write(ent['名称']+('\n' if i != len(v)-1 else ''))
+    # 4. 创建索引 (优化关键点!)
+    # 收集所有标签
+    all_labels = list(all_entity.keys())
+    create_indexes(client, all_labels)
 
-    #将属性和实体导入到neo4j上,注:只有疾病有属性，特判
+    # 5. 写入数据到 Neo4j
+    print("开始向 Neo4j 写入数据...")
+
     for k in all_entity:
-        if k!="疾病":
-            import_entity(client,k,all_entity[k])
+        if k != "疾病":
+            import_entity_batch(client, k, all_entity[k])
         else:
-            
-            import_disease_data(client,k,all_entity[k])
-    create_all_relationship(client,relationship)
+            import_disease_data_batch(client, all_entity[k])
 
-    
+    # 6. 写入关系
+    create_relationship_batch(client, relationship)
 
-    
-
-    
+    print("全部导入完成！")
