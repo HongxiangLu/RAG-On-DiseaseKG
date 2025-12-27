@@ -120,6 +120,6 @@ with open('./data/medical.json','r',encoding='utf-8') as f:
         
         json_str = json.dumps(data,ensure_ascii=False)
         
-        with open('./data/medical_new_2.json', 'a',encoding='utf8') as f:
+        with open('./data/medical_new.json', 'a',encoding='utf8') as f:
             # 确保内容从新的一行开始
             f.write(json_str+',\n')

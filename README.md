@@ -31,7 +31,7 @@
 
 ## 环境配置（Python 3.12）
 
-
+按照如下方式配置环境，在2025年12月可以完美运行项目。由于软件包的更新，Streamlit的版本应当高于1.27.0。
 
 ```
 git clone https://github.com/HongxiangLu/RAG-On-DiseaseKG
@@ -44,27 +44,17 @@ pip install -i https://pypi.tuna.tsinghua.edu.cn/simple streamlit ollama transfo
 
 ## 构建知识图谱
 
-这个项目依赖于Neo4j图数据库。首先在[Neo4j Aura](https://console-preview.neo4j.io/)上注册账户，创建在线的图数据库。
+这个项目依赖于Neo4j图数据库。首先在[Neo4j Aura](https://console-preview.neo4j.io/)上注册账户，创建在线的图数据库，并在[Neo4j_Config.json](Neo4j_Config.json)文件中修改数据库的信息。
 
-安装并运行Neo4j后，我们需要根据```data/medical_new_2.json```数据集创建一个知识图谱。
-
-```
-python build_up_graph.py --website YourWebSite --user YourUserName --password YourPassWord --dbname YourDBName
-```
-
-其中，```--website```代表你的Neo4j网址，```--user```代表你的数据库用户名，```--password```代表你的数据库密码，```--dbname```代表你的数据库名字。
-
-示例:
+其次，我们需要根据[medical_new.json](data/medical_new.json)数据集创建一个知识图谱。
 
 ```
-python build_up_graph.py --website http://localhost:7474 --user neo4j --password YourPassWord --dbname neo4j
+python build_up_graph.py
 ```
 
-运行```build_up_graph.py```后，会自动在```data```文件夹下创建```ent_aug```文件夹和```rel_aug.txt```文件，分别存放所有实体和关系。
+运行[build_up_graph.py](build_up_graph.py)会自动在```data```文件夹下创建```ent_aug```文件夹和```rel_aug.txt```文件，分别存放所有实体和关系。
 
-
-
-下表展示了```medical_new_2.json```中的关键信息，更多详细信息请点击[这里](https://github.com/nuolade/disease-kb)查看：
+下表展示了```medical_new.json```中的关键信息，更多详细信息请点击[这里](https://github.com/nuolade/disease-kb)查看：
 
 知识图谱实体类型（8类实体）：
 
@@ -125,7 +115,7 @@ python build_up_graph.py --website http://localhost:7474 --user neo4j --password
 
 **<u>数据集创建：</u>**
 
-你可以运行```ner_data.py```，这段代码会根据```data/medical_new_2.json```中的文字，结合规则匹配技术，创建一个NER数据集，保存在```data/ner_data_aug.txt```中。
+你可以运行```ner_data.py```，这段代码会根据[medical_new.json](data/medical_new.json)中的文字，结合规则匹配技术，创建一个NER数据集，保存在```data/ner_data_aug.txt```中。
 
 ```
 python ner_data.py #可以不运行
@@ -211,13 +201,13 @@ class Bert_Model(nn.Module):
 
 <img src="img/yuju.jpg" style="zoom:30%;" />
 
-注：这部分代码整合到了```webui.py```中，您无需进行任何操作。
+注：这部分代码整合到了```webui.py```中，无需进行任何操作。
 
 ## 运行界面
 
 
 
-我们将意图识别、知识库查询、对话界面都写在了```webui.py```中。2024.5.21，我们为界面增加了登陆、注册界面，设置了用户和管理员两种身份，您可以使用命令启动：
+我们将意图识别、知识库查询、对话界面都写在了```webui.py```中。我们为界面增加了登陆、注册界面，设置了用户和管理员两种身份，您可以使用命令启动：
 
 ```
 streamlit run login.py
@@ -254,10 +244,4 @@ streamlit run login.py
 <img src="img/e6.png" style="zoom:40%;" />
 
 <img src="img/e7.png" style="zoom:40%;" />
-
-## 联系方式
-
-如果您的复现遇到了困难，请随时联系！
-
-邮箱：zeromakers@outlook.com
 
