@@ -1,6 +1,6 @@
 import os
 import streamlit as st
-import ner_model as zwk
+import ner_model as ner_model
 import pickle
 from transformers import BertTokenizer
 import torch
@@ -23,11 +23,11 @@ def load_model(cache_model):
     with open('tmp_data/tag2idx.npy', 'rb') as f:
         tag2idx = pickle.load(f)
     idx2tag = list(tag2idx)
-    rule = zwk.rule_find()
-    tfidf_r = zwk.tfidf_alignment()
+    rule = ner_model.rule_find()
+    tfidf_r = ner_model.tfidf_alignment()
     model_name = 'model/chinese-roberta-wwm-ext'
     bert_tokenizer = BertTokenizer.from_pretrained(model_name)
-    bert_model = zwk.Bert_Model(model_name, hidden_size=128, tag_num=len(tag2idx), bi=True)
+    bert_model = ner_model.Bert_Model(model_name, hidden_size=128, tag_num=len(tag2idx), bi=True)
     bert_model.load_state_dict(torch.load(f'model/{cache_model}.pt', map_location=torch.device('cpu')))
     
     bert_model = bert_model.to(device)
@@ -167,7 +167,7 @@ def add_lianxi_prompt(entity,lianxi,target,client):
         pass
     return add_prompt
 def generate_prompt(response,query,client,bert_model, bert_tokenizer,rule, tfidf_r, device, idx2tag):
-    entities = zwk.get_ner_result(bert_model, bert_tokenizer, query, rule, tfidf_r, device, idx2tag)
+    entities = ner_model.get_ner_result(bert_model, bert_tokenizer, query, rule, tfidf_r, device, idx2tag)
     yitu = []
     prompt = "<指令>你是一个医疗问答机器人，你需要根据给定的提示回答用户的问题。请注意，你的全部回答必须完全基于给定的提示，不可自由发挥。如果根据提示无法给出答案，立刻回答“根据已知信息无法回答该问题”。</指令>"
     prompt +="<指令>请你仅针对医疗类问题提供简洁和专业的回答。如果问题不是医疗相关的，你一定要回答“我只能回答医疗相关的问题。”，以明确告知你的回答限制。</指令>"
