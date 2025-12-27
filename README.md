@@ -1,61 +1,50 @@
-# 基于RAG与大模型技术的医疗问答系统
+# 基于RAG与知识图谱的医疗问答系统
 
-本项目使用的数据集来源于[Open-KG](http://data.openkg.cn/dataset/disease-information)，参考了[RAGOnMedicalKG](https://github.com/liuhuanyong/RAGOnMedicalKG)、[QASystemOnMedicalKG](https://github.com/liuhuanyong/QASystemOnMedicalKG)
+本项目使用的数据集来源于[DiseaseKG](http://data.openkg.cn/dataset/disease-information)，参考了[RAGQnASystem](https://github.com/honeyandme/RAGQnASystem)。
 
 ## 介绍
 
-本项目整体流程：
+本项目的整体流程：
 
 <img src="img/all.png" style="zoom:100%;" />
 
 
-本项目设计了一个基于 RAG 与大模型技术的医疗问答系统，利用 DiseaseKG 数据集与 Neo4j 构建知识图谱，结合 BERT 的命名实体识别和 34b 大模型的意图识别，通过精确的知识检索和问答生成，提升系统在医疗咨询中的性能，解决大模型在医疗领域应用的可靠性问题。
-
-RAG技术：
+本项目设计了一个基于 RAG 与知识图谱的医疗问答系统，利用 DiseaseKG 数据集与 Neo4j 构建知识图谱，结合 BERT 的命名实体识别和大模型的意图识别，通过精确的知识检索和问答生成，提升系统在医疗咨询中的性能，解决大模型在医疗领域应用的可靠性问题。
 
 <img src="img/RAG.png" style="zoom:100%;" />
 
 
 
-本项目采用知识图谱实现RAG，如果您想用向量数据库实现RAG技术，请移步[Langchain-Chatchat](https://github.com/chatchat-space/Langchain-Chatchat)：
-
-<img src="img/langchain+chatglm.png" style="zoom:50%;" />
-
 本项目主要贡献：
 
-(1) 传统的 RAG 技术通常是利用向量数据库实现的。区别于传统的 RAG 实现方 式，本项目采用了知识图谱，为大模型提供了更加精确的外部信息。
+（1）传统的 RAG 技术通常是利用向量数据库实现的。区别于传统的 RAG 实现方式，本项目采用了知识图谱，为大模型提供了更加精确的外部信息。
 
-(2) 本项目构建了一个医疗领域的知识图谱，并采用大语言模型优化了知识图谱数 据集文件的实体信息，使得构建出的知识图谱更加准确与科学。
+（2）本项目构建了一个医疗领域的知识图谱，并采用大语言模型优化了知识图谱数据集文件的实体信息，使得构建出的知识图谱更加准确与科学。
 
-(3) 本项目通过规则匹配的方式构建了一个实体识别数据集（NER），得益于（2） 在实体名字上的优化，我们的模型可以轻松的在构建的数据集上表现出极高的性能。
+（3）本项目通过规则匹配的方式构建了一个实体识别数据集（NER），得益于（2）在实体名字上的优化，我们的模型可以轻松的在构建的数据集上表现出极高的性能。
 
-(4) 本项目针对实体识别任务提出并实施了三种数据增强策略：实体替换、实体掩 码和实体拼接， 提升了 RoBERTa 模型的性能。 在测试集上，这些数据增强措施使得 RoBERTa 模型的 F1 分数从原来的 96.77%提升至 97.40%。
+（4）本项目针对实体识别任务提出并实施了三种数据增强策略：实体替换、实体掩码和实体拼接， 提升了 RoBERTa 模型的性能。 在测试集上，这些数据增强措施使得 RoBERTa 模型的 F1 分数从原来的 96.77%提升至 97.40%。
 
-(5) 为了避免数据标注所造成的人工成本，本项目直接设计 Prompt，结合上下文学习与思维链技术，采用大语言模型对用户的提问进行意图识别。这种方法在减少人工成本的基础上保证了意图识别过程的准确度。
+（5）为了避免数据标注所造成的人工成本，本项目直接设计 Prompt，结合上下文学习与思维链技术，采用大语言模型对用户的提问进行意图识别。这种方法在减少人工成本的基础上保证了意图识别过程的准确度。
 
-(6) 本项目使用 Streamlit 框架对上述模型进行部署，实现了高度封装。我们的界面 涵盖了注册与登录、大语言模型的选择、创建多个聊天窗口等多项功能。
+（6）本项目使用 Streamlit 框架对上述模型进行部署，实现了高度封装。我们的界面涵盖了注册与登录、大语言模型的选择、创建多个聊天窗口等多项功能。
 
-## :fire:To do
+## 环境配置（Python 3.12）
 
-- [x] 增加界面的功能(2024.5.21)：增加了登陆、注册界面(含用户、管理员2个身份)，大模型选择按钮(可选千问和llama)、多窗口对话功能等。
-- [ ] NL2Cyhper
-- [ ] 更多优化...
 
-## Python环境配置
-
-一个例子:
 
 ```
-git clone https://github.com/honeyandme/RAGQnASystem.git
-cd RAGQnASystem
-conda create -n RAGQnASystem python=3.10
-conda activate RAGQnASystem
-pip install -r requirements.txt
+git clone https://github.com/HongxiangLu/RAG-On-DiseaseKG
+cd RAG-On-DiseaseKG
+python -m venv venv
+venv\Scripts\activate
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple streamlit ollama transformers scikit-learn seqeval pyahocorasick
 ```
 
 ## 构建知识图谱
 
-首先需要安装Neo4j，[官方网站](https://neo4j.com/deployment-center/#community)。本项目使用的版本是neo4j-community-5.18.1，需要依赖jdk17。
+这个项目依赖于Neo4j图数据库。首先在[Neo4j Aura](https://console-preview.neo4j.io/)上注册账户，创建在线的图数据库。
 
 安装并运行Neo4j后，我们需要根据```data/medical_new_2.json```数据集创建一个知识图谱。
 

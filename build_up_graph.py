@@ -2,13 +2,13 @@ import py2neo
 from tqdm import tqdm
 import argparse
 from collections import defaultdict
+import json  # <--- 新增
+import os
 
 # ================= 配置区 =================
 BATCH_SIZE = 3000  # 每批次处理的大小，建议 1000-5000 之间
 
-
 # ================= 核心工具函数 =================
-
 def create_indexes(graph, labels):
     """
     为所有标签的'名称'属性创建唯一索引/约束。
@@ -43,7 +43,6 @@ def batch_run(graph, query, data, desc="处理中"):
 
 
 # ================= 导入逻辑 =================
-
 def import_entity_batch(client, label, entity_list):
     """
     批量导入普通实体
@@ -105,20 +104,37 @@ def create_relationship_batch(client, all_relationship):
 
 
 # ================= 主程序 =================
-
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="通过medical.json文件,创建一个知识图谱")
-    parser.add_argument('--website', type=str, default='neo4j+s://1780803b.databases.neo4j.io', help='neo4j的连接网站')
-    parser.add_argument('--user', type=str, default='neo4j', help='neo4j的用户名')
-    parser.add_argument('--password', type=str, default='Td-9pMq5QvAEhehWZh5cANjIvNf9P6Crpc7WnhDV2Hc',
-                        help='neo4j的密码')
-    parser.add_argument('--dbname', type=str, default='neo4j', help='数据库名称')
+    # --- 新增：读取配置文件逻辑 ---
+    config_data = {}
+    config_path = "Neo4j_Config.json"
+
+    if os.path.exists(config_path):
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config_data = json.load(f)
+    else:
+        print(f"警告: 未找到 {config_path}，将仅依赖命令行参数。")
+
+    parser = argparse.ArgumentParser(description="通过medical_new.json文件,创建一个知识图谱")
+
+    # --- 修改：将 default 值改为从 config_data 中获取，如果没有则为 None ---
+    parser.add_argument('--website', type=str, default=config_data.get('website'), help='neo4j的连接网站')
+    parser.add_argument('--user', type=str, default=config_data.get('user'), help='neo4j的用户名')
+    parser.add_argument('--password', type=str, default=config_data.get('password'), help='neo4j的密码')
+    parser.add_argument('--dbname', type=str, default=config_data.get('dbname', 'neo4j'), help='数据库名称')
+
     args = parser.parse_args()
+
+    # 检查必要参数是否为空（防止配置文件和命令行都没提供的情况）
+    if not all([args.website, args.user, args.password]):
+        print("错误: 缺少数据库连接配置。请检查 config.json 或通过命令行参数传入。")
+        exit(1)
 
     # 1. 连接数据库
     try:
+        # 这里直接使用 args 即可，因为它们已经包含了配置文件或命令行的值
         client = py2neo.Graph(args.website, user=args.user, password=args.password, name=args.dbname)
-        print("数据库连接成功")
+        print(f"数据库连接成功: {args.website}")
     except Exception as e:
         print(f"数据库连接失败: {e}")
         exit(1)
@@ -129,7 +145,7 @@ if __name__ == "__main__":
 
     # 3. 数据处理 (保持原有逻辑，稍作清理)
     print("正在读取并解析 JSON 数据...")
-    with open('./data/medical_new_2.json', 'r', encoding='utf-8') as f:
+    with open('data/medical_new.json', 'r', encoding='utf-8') as f:
         all_data = f.read().split('\n')
 
     all_entity = {
