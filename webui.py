@@ -2,24 +2,23 @@ import os
 import streamlit as st
 import ner_model as zwk
 import pickle
-import ollama
 from transformers import BertTokenizer
 import torch
 import py2neo
 import random
 import re
+import json  # <--- 新增这一行
 
+# --- 修改后 ---
+import dashscope
+from http import HTTPStatus
+# 建议将 key 放在环境变量中，或者暂时硬编码在这里（注意保密）
+dashscope.api_key = "sk-03c44d2c021f46198a89615f97a776df"
 
 
 @st.cache_resource
 def load_model(cache_model):
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    #加载ChatGLM模型
-    # glm_tokenizer = AutoTokenizer.from_pretrained("model/chatglm3-6b-128k", trust_remote_code=True)
-    # glm_model = AutoModel.from_pretrained("model/chatglm3-6b-128k",trust_remote_code=True,device=device)
-    # glm_model.eval()
-    glm_model = None
-    glm_tokenizer= None
     #加载Bert模型
     with open('tmp_data/tag2idx.npy', 'rb') as f:
         tag2idx = pickle.load(f)
@@ -29,11 +28,11 @@ def load_model(cache_model):
     model_name = 'model/chinese-roberta-wwm-ext'
     bert_tokenizer = BertTokenizer.from_pretrained(model_name)
     bert_model = zwk.Bert_Model(model_name, hidden_size=128, tag_num=len(tag2idx), bi=True)
-    bert_model.load_state_dict(torch.load(f'model/{cache_model}.pt'))
+    bert_model.load_state_dict(torch.load(f'model/{cache_model}.pt', map_location=torch.device('cpu')))
     
     bert_model = bert_model.to(device)
     bert_model.eval()
-    return glm_tokenizer,glm_model,bert_tokenizer,bert_model,idx2tag,rule,tfidf_r,device
+    return bert_tokenizer,bert_model,idx2tag,rule,tfidf_r,device
 
 
 
@@ -108,11 +107,29 @@ def Intent_Recognition(query,choice):
 输出的时候请确保输出内容都在**查询类别**中出现过。确保输出类别个数**不要超过5个**！确保你的解释和合乎逻辑的！注意，如果用户询问了有关疾病的问题，一般都要先介绍一下疾病，也就是有"查询疾病简介"这个需求。
 再次检查你的输出都包含在**查询类别**:"查询疾病简介"、"查询疾病病因"、"查询疾病预防措施"、"查询疾病治疗周期"、"查询治愈概率"、"查询疾病易感人群"、"查询疾病所需药品"、"查询疾病宜吃食物"、"查询疾病忌吃食物"、"查询疾病所需检查项目"、"查询疾病所属科目"、"查询疾病的症状"、"查询疾病的治疗方法"、"查询疾病的并发疾病"、"查询药品的生产商"。
 """
-    rec_result = ollama.generate(model=choice, prompt=prompt)['response']
+
+    # 也就是在 prompt = f"""...""" 之后，删除原来的 ollama 代码，换成下面这个：
+    try:
+        messages = [{'role': 'user', 'content': prompt}]
+        # 调用 DashScope API，result_format='message' 为了兼容性
+        resp = dashscope.Generation.call(
+            model=choice,
+            messages=messages,
+            result_format='message'
+        )
+
+        if resp.status_code == HTTPStatus.OK:
+            rec_result = resp.output.choices[0].message.content
+        else:
+            print(f'请求失败: {resp.code}, {resp.message}')
+            rec_result = "根据已知信息无法回答该问题"  # 失败时的兜底
+
+    except Exception as e:
+        print(f"API调用错误: {e}")
+        rec_result = "根据已知信息无法回答该问题"
+
     print(f'意图识别结果:{rec_result}')
     return rec_result
-    # response, _ = glm_model.chat(glm_tokenizer, prompt, history=[])
-    # return response
 
 
 def add_shuxing_prompt(entity,shuxing,client):
@@ -151,8 +168,6 @@ def add_lianxi_prompt(entity,lianxi,target,client):
     return add_prompt
 def generate_prompt(response,query,client,bert_model, bert_tokenizer,rule, tfidf_r, device, idx2tag):
     entities = zwk.get_ner_result(bert_model, bert_tokenizer, query, rule, tfidf_r, device, idx2tag)
-    # print(response)
-    # print(entities)
     yitu = []
     prompt = "<指令>你是一个医疗问答机器人，你需要根据给定的提示回答用户的问题。请注意，你的全部回答必须完全基于给定的提示，不可自由发挥。如果根据提示无法给出答案，立刻回答“根据已知信息无法回答该问题”。</指令>"
     prompt +="<指令>请你仅针对医疗类问题提供简洁和专业的回答。如果问题不是医疗相关的，你一定要回答“我只能回答医疗相关的问题。”，以明确告知你的回答限制。</指令>"
@@ -252,15 +267,6 @@ def generate_prompt(response,query,client,bert_model, bert_tokenizer,rule, tfidf
     return prompt,"、".join(yitu),entities
 
 
-
-def ans_stream(prompt):
-    
-    result = ""
-    for res,his in glm_model.stream_chat(glm_tokenizer, prompt, history=[]):
-        yield res
-
-
-
 def main(is_admin, usname):
     cache_model = 'best_roberta_rnn_model_ent_aug'
     st.title(f"医疗智能问答机器人")
@@ -268,7 +274,7 @@ def main(is_admin, usname):
     with st.sidebar:
         col1, col2 = st.columns([0.6, 0.6])
         with col1:
-            st.image(os.path.join("img", "logo.jpg"), use_column_width=True)
+            st.image(os.path.join("img", "logo.jpg"), use_container_width=True)
 
         st.caption(
             f"""<p align="left">欢迎您，{'管理员' if is_admin else '用户'}{usname}！当前版本：{1.0}</p>""",
@@ -287,11 +293,18 @@ def main(is_admin, usname):
         selected_window = st.selectbox('请选择对话窗口:', window_options)
         active_window_index = int(selected_window.split()[1]) - 1
 
+        # [修改点 1]：更新下拉菜单和模型名称映射
         selected_option = st.selectbox(
             label='请选择大语言模型:',
-            options=['Qwen 1.5', 'Llama2-Chinese']
+            options=['Qwen Turbo', 'Qwen Plus', 'Qwen Max']
         )
-        choice = 'qwen:32b' if selected_option == 'Qwen 1.5' else 'llama2-chinese:13b-chat-q8_0'
+        # 映射到阿里云的模型代号
+        if selected_option == 'Qwen Turbo':
+            choice = 'qwen-turbo'  # 速度快，便宜
+        elif selected_option == 'Qwen Plus':
+            choice = 'qwen-plus'  # 均衡
+        else:
+            choice = 'qwen-max'  # 能力最强
 
         show_ent = show_int = show_prompt = False
         if is_admin:
@@ -307,10 +320,35 @@ def main(is_admin, usname):
         if st.button("返回登录"):
             st.session_state.logged_in = False
             st.session_state.admin = False
-            st.experimental_rerun()
+            st.rerun()
 
-    glm_tokenizer, glm_model, bert_tokenizer, bert_model, idx2tag, rule, tfidf_r, device = load_model(cache_model)
-    client = py2neo.Graph('http://localhost:7474', user='neo4j', password='wei8kang7.long', name='neo4j')
+    bert_tokenizer, bert_model, idx2tag, rule, tfidf_r, device = load_model(cache_model)
+    # --- 新增：读取 config.json 逻辑 ---
+    config_path = "config.json"
+    # 设置默认值（以防配置文件不存在）
+    neo4j_config = {
+        "website": "",
+        "user": "",
+        "password": "",
+        "dbname": "neo4j"
+    }
+    if os.path.exists(config_path):
+        with open(config_path, 'r', encoding='utf-8') as f:
+            neo4j_config.update(json.load(f))
+    else:
+        st.error(f"配置文件 {config_path} 未找到，无法连接知识图谱！")
+    try:
+        # 使用配置文件中的参数连接
+        client = py2neo.Graph(
+            neo4j_config.get('website'),
+            user=neo4j_config.get('user'),
+            password=neo4j_config.get('password'),
+            name=neo4j_config.get('dbname')
+        )
+    except Exception as e:
+        st.error(f"连接知识图谱失败: {e}")
+        # 为了防止后续代码报错，这里可以给 client 赋 None 或停止运行
+        client = None
 
     current_messages = st.session_state.messages[active_window_index]
 
@@ -343,9 +381,23 @@ def main(is_admin, usname):
         prompt, yitu, entities = generate_prompt(response, query, client, bert_model, bert_tokenizer, rule, tfidf_r, device, idx2tag)
 
         last = ""
-        for chunk in ollama.chat(model=choice, messages=[{'role': 'user', 'content': prompt}], stream=True):
-            last += chunk['message']['content']
-            response_placeholder.markdown(last)
+        # [修改点 2]：替换底部的流式输出逻辑
+        # 使用 DashScope 的流式调用
+        responses = dashscope.Generation.call(
+            model=choice,
+            messages=[{'role': 'user', 'content': prompt}],
+            result_format='message',
+            stream=True,  # 开启流式
+            incremental_output=True  # 开启增量输出（类似打字机效果）
+        )
+        for response in responses:
+            if response.status_code == HTTPStatus.OK:
+                # 获取增量内容
+                delta = response.output.choices[0].message.content
+                last += delta
+                response_placeholder.markdown(last)
+            else:
+                st.error(f"请求失败: {response.code} - {response.message}")
         response_placeholder.markdown("")
 
         knowledge = re.findall(r'<提示>(.*?)</提示>', prompt)
