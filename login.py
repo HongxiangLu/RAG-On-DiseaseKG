@@ -22,6 +22,8 @@ def login_page():
                 st.session_state.logged_in = True
                 st.session_state.admin = user_cred.is_admin
                 st.session_state.usname = username
+                # 你安装的 Streamlit 版本比较新（1.31.0 或更高），而代码中使用的 st.experimental_rerun() 是一个已被废弃并移除的旧函数。
+                # 新的替代函数非常简单，叫 st.rerun()。
                 st.rerun()
             else:
                 st.error("用户名或密码错误，请重新输入。")

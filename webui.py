@@ -274,7 +274,9 @@ def main(is_admin, usname):
     with st.sidebar:
         col1, col2 = st.columns([0.6, 0.6])
         with col1:
-            st.image(os.path.join("img", "logo.jpg"), use_container_width=True)
+            # `use_container_width` will be removed after 2025-12-31.
+            # For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`
+            st.image(os.path.join("img", "logo.jpg"), width='stretch')
 
         st.caption(
             f"""<p align="left">欢迎您，{'管理员' if is_admin else '用户'}{usname}！当前版本：{1.0}</p>""",
@@ -323,8 +325,8 @@ def main(is_admin, usname):
             st.rerun()
 
     bert_tokenizer, bert_model, idx2tag, rule, tfidf_r, device = load_model(cache_model)
-    # --- 新增：读取 config.json 逻辑 ---
-    config_path = "config.json"
+    # --- 新增：读取 Neo4j_Config.json 逻辑 ---
+    config_path = "Neo4j_Config.json"
     # 设置默认值（以防配置文件不存在）
     neo4j_config = {
         "website": "",
