@@ -22,7 +22,7 @@ def login_page():
                 st.session_state.logged_in = True
                 st.session_state.admin = user_cred.is_admin
                 st.session_state.usname = username
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("用户名或密码错误，请重新输入。")
 
@@ -42,7 +42,7 @@ def register_page():
                 credentials[new_username] = new_user
                 write_credentials(storage_file, credentials)
                 st.success(f"用户 {new_username} 注册成功！请登录。")
-                st.experimental_rerun()
+                st.rerun()
 
 if __name__ == "__main__":
     if not st.session_state.logged_in:
