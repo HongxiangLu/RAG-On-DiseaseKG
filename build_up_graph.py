@@ -127,7 +127,7 @@ if __name__ == "__main__":
 
     # 检查必要参数是否为空（防止配置文件和命令行都没提供的情况）
     if not all([args.website, args.user, args.password]):
-        print("错误: 缺少数据库连接配置。请检查 config.json 或通过命令行参数传入。")
+        print("错误: 缺少数据库连接配置。请检查Neo4j_Config.json或通过命令行参数传入。")
         exit(1)
 
     # 1. 连接数据库
