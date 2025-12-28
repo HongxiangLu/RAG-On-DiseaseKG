@@ -39,7 +39,7 @@ cd RAG-On-DiseaseKG
 python -m venv venv
 venv\Scripts\activate
 pip install torch --index-url https://download.pytorch.org/whl/cpu
-pip install -i https://pypi.tuna.tsinghua.edu.cn/simple streamlit ollama transformers scikit-learn seqeval pyahocorasick
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple streamlit dashscope transformers scikit-learn seqeval pyahocorasick
 ```
 
 为了项目顺利运行，还需要下载模型权重：[chinese-roberta-wwm-ext](https://huggingface.co/hfl/chinese-roberta-wwm-ext)和[best_roberta_rnn_model_ent_aug.pt](https://pan.baidu.com/s/1kwiNDyNjO2E2uO0oYmK8SA?pwd=08or)，都放在```model```文件夹下。
