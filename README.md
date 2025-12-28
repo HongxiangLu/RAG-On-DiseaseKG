@@ -44,6 +44,8 @@ pip install -i https://pypi.tuna.tsinghua.edu.cn/simple streamlit ollama transfo
 
 为了项目顺利运行，还需要下载模型权重：[chinese-roberta-wwm-ext](https://huggingface.co/hfl/chinese-roberta-wwm-ext)和[best_roberta_rnn_model_ent_aug.pt](https://pan.baidu.com/s/1kwiNDyNjO2E2uO0oYmK8SA?pwd=08or)，都放在```model```文件夹下。
 
+在虚拟环境中运行```streamlit run login.py```命令就可以运行项目主体。
+
 ## 构建知识图谱
 
 这个项目依赖于Neo4j图数据库。首先在[Neo4j Aura](https://console-preview.neo4j.io/)上注册账户，创建在线的图数据库，并在[Neo4j_Config.json](Neo4j_Config.json)文件中修改数据库的信息。
